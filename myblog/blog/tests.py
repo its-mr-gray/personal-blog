@@ -172,3 +172,85 @@ class PostOwnershipTest(APITestCase):
         self.client.login(username="user_b", password="user_b_pass")
         response = self.client.delete(self.detail_url)
         self.assertEqual(response.status_code, 403)
+
+
+class PostFilteringTest(APITestCase):
+    def setUp(self):
+        self.user_a = User.objects.create(username="tim", password="tim_pass")
+        self.user_b = User.objects.create(username="alice", password="alice_pass")
+        Post.objects.create(
+            post_title="Test1",
+            post_content="just a test",
+            author=self.user_a,
+            created_date="2022-01-01",
+        )
+        Post.objects.create(
+            post_title="SomethingElse",
+            post_content="a second test",
+            author=self.user_b,
+            created_date="2009-09-09",
+        )
+        Post.objects.create(
+            post_title="Test3",
+            post_content="a third test",
+            author=self.user_a,
+            created_date="2010-09-26",
+        )
+
+    def test_filter_by_post(self):
+        url = reverse("post-list") + "?post_title=Test"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            all("Test" in post["post_title"] for post in response.data["results"])
+        )
+
+    def test_filter_by_author(self):
+        url = reverse("post-list") + f"?author__username={self.user_a.username}"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            all(
+                post["author"] == self.user_a.username
+                for post in response.data["results"]
+            )
+        )
+
+    def test_filter_by_date(self):
+        url = reverse("post-list") + "?created_date=2010-09-26"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            all(
+                post["created_date"] == "2010-09-26"
+                for post in response.data["results"]
+            )
+        )
+
+    def test_combined_filters(self):
+        url = reverse("post-list") + f"?post_title=Test&author__={self.user_a.username}"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            all(
+                "Test" in post["post_title"] and post["author"] == self.user_a.username
+                for post in response.data["results"]
+            )
+        )
+
+    def test_no_matches(self):
+        url = reverse("post-list") + "?post_title=AMadeUpTitle"
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.data["results"]), 0)
+
+
+class PostUserAuthenticationTest(APITestCase):
+    def setUp(self):
+        self.user_a = User.objects.create(username="tim", password="tim_pass")
+        self.user_b = User.objects.create(username="alice", password="alice_pass")
+
+    def test_user_can_register(self):
+        url = reverse("user-register")
+        response = self.client.get(url, self.user_a)
+        self.assertEqual(response.status_code, 201)
